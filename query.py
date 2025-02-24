@@ -130,6 +130,12 @@ def process_manifest(file_path_or_url, method, include_release_arch, local_base_
         # Generate URLs
         package_data = get_urls(package_name, package_version, method, local_base_path)
         
+        # Get Ubuntu releases and architectures if requested
+        if include_release_arch:
+            package_version, releases, architectures = get_package_info(package_name, package_version)
+            package_data["releases"] = ", ".join(releases)
+            package_data["architectures"] = ", ".join(architectures)
+
         results.append({
             "package": package_name,
             "version": package_version,
@@ -151,15 +157,10 @@ def print_results(results, output_file):
         print(f"Copyright URL: {res['copyright_url']}")
         print(f"Changelog URL: {res['changelog_url']}")
         print(f"SPDX Licenses: {', '.join(res['licenses'])}")
+        if "releases" in res:
+            print(f"Ubuntu Releases: {res['releases']}")
+            print(f"Supported Architectures: {res['architectures']}")
         print("\n" + "-"*60 + "\n")
-
-    if output_file:
-        with open(output_file, "w", encoding="utf-8") as f:
-            for res in results:
-                f.write(f"{res['package']}\t{res['version']}\t{res['component']}\t"
-                        f"{res['copyright_url']}\t{res['changelog_url']}\t"
-                        f"{', '.join(res['licenses'])}\n")
-        print(f"Results saved to {output_file}")
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch Ubuntu package copyright and SPDX info.")
@@ -174,15 +175,16 @@ def main():
     method_group.add_argument("--binary", action="store_true", help="Use binary method URLs.")
 
     parser.add_argument("--local-path", help="Path to local copyright file directory.")
+    parser.add_argument("--no-release-arch", action="store_true", help="Skip release and architecture data.")
     parser.add_argument("--output", help="Optional output file to save results.")
 
     args = parser.parse_args()
-    
+
     method = "pool" if args.pool else "binary"
-    local_base_path = args.local_path
+    include_release_arch = not args.no_release_arch
 
     if args.manifest:
-        process_manifest(args.manifest, method, True, local_base_path, args.output)
+        process_manifest(args.manifest, method, include_release_arch, args.local_path, args.output)
 
 if __name__ == "__main__":
     main()
