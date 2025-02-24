@@ -2,6 +2,7 @@ import aiohttp
 import asyncio
 import json
 import re
+import os
 from tqdm import tqdm
 from aiohttp import ClientSession
 from rich.console import Console
@@ -17,8 +18,9 @@ console = Console()
 def get_mode():
     parser = argparse.ArgumentParser(description="Choose mode for fetching package metadata.")
     parser.add_argument("mode", choices=["binary", "pool"], help="Select mode: 'binary' for alphanumeric processing or 'pool' for Ubuntu component processing.")
+    parser.add_argument("--output-dir", default=".", help="Directory to save output files (default: current directory)")
     args = parser.parse_args()
-    return args.mode
+    return args.mode, args.output_dir
 
 async def fetch_dirs(session, base_url):
     async with session.get(base_url) as response:
@@ -56,12 +58,19 @@ async def parse_package_list(session, html, base_url, component):
             sub_html = await response.text()
             version_matches = re.findall(r'href="([^"/]+)/"', sub_html)
             for version in version_matches:
-                corrected_url = f"{package_url}{version}/"
-                copyright_url = f"{corrected_url}copyright"
-                changelog_url = f"{corrected_url}changelog"
-                package_versions[package].append({"version": version, "copyright_url": copyright_url, "changelog_url": changelog_url})
+                corrected_url = f"{package_url}{package}_{version}/"
+                copyright_url = f"{corrected_url}/copyright"
+                changelog_url = f"{corrected_url}/changelog"
+                package_versions[package].append({
+                    "component": component,
+                    "package": package,
+                    "version": version,
+                    "copyright_url": copyright_url,
+                    "changelog_url": changelog_url,
+                    "licenses": []  # Placeholder for future SPDX license extraction
+                })
     
-    return package_versions
+    return {component: package_versions}  # Ensure data is correctly categorized under the right component
 
 async def process_component(session, base_url, component, semaphore):
     async with semaphore:
@@ -70,7 +79,8 @@ async def process_component(session, base_url, component, semaphore):
             return {}
         return await parse_package_list(session, html, base_url, component)
 
-async def build_json(mode):
+async def build_json(mode, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
     async with ClientSession() as session:
         base_url = binary_base_url if mode == "binary" else pool_base_url
         components = sorted(await fetch_dirs(session, base_url))
@@ -87,15 +97,16 @@ async def build_json(mode):
         
         for component, future in zip(tasks.keys(), asyncio.as_completed(tasks.values())):
             try:
-                results[component] = await future
-                if results[component]:
-                    with open(f"{component}.json", "w") as json_file:
-                        json.dump(results[component], json_file, indent=4)
+                component_results = await future
+                if component_results:
+                    output_path = os.path.join(output_dir, f"{component}.json")
+                    with open(output_path, "w") as json_file:
+                        json.dump(component_results, json_file, indent=4)
                     console.print(f"[bold green]{component} completed[/bold green]")
             except Exception as e:
                 print(f"Error processing {component}: {e}")
         
         print("Processing complete.")
 
-mode = get_mode()
-asyncio.run(build_json(mode))
+mode, output_dir = get_mode()
+asyncio.run(build_json(mode, output_dir))
