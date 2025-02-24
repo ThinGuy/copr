@@ -31,33 +31,57 @@ def find_package_component(package_name, package_version):
             return component, url
     return None, None
 
-def extract_spdx_license(copyright_url):
-    """Fetch and extract the SPDX license ID from the copyright file."""
+def extract_spdx_license(file_path_or_url, is_local):
+    """Extract the SPDX License ID from a local or online copyright file."""
     try:
-        response = requests.get(copyright_url, timeout=5)
-        if response.status_code == 200:
-            matches = re.findall(r"License:\s*(\S+)", response.text)
-            return list(set(matches)) if matches else ["Unknown"]
-    except requests.RequestException:
-        pass
-    return ["Unknown"]
+        if is_local:
+            with open(file_path_or_url, "r", encoding="utf-8") as f:
+                content = f.read()
+        else:
+            response = requests.get(file_path_or_url, timeout=5)
+            if response.status_code != 200:
+                return ["Unknown"]
+            content = response.text
 
-def get_urls(package_name, package_version, method):
-    """Generate URLs based on the selected method (pool or binary)."""
+        matches = re.findall(r"License:\s*(\S+)", content)
+        return list(set(matches)) if matches else ["Unknown"]
+
+    except (requests.RequestException, FileNotFoundError, IOError):
+        return ["Unknown"]
+
+def get_local_file_path(base_path, method, package_name, package_version):
+    """Construct local file path for copyright based on Ubuntu's changelog directory structure."""
     first_letter = determine_first_letter(package_name)
-    results = {}
+    
+    if method == "pool":
+        for component in COMPONENTS:
+            local_path = os.path.join(base_path, "pool", component, first_letter, package_name, f"{package_name}_{package_version}", "copyright")
+            if os.path.exists(local_path):
+                return local_path
+    elif method == "binary":
+        local_path = os.path.join(base_path, "binary", first_letter, package_name, package_version, "copyright")
+        if os.path.exists(local_path):
+            return local_path
+    return None
+
+def get_urls(package_name, package_version, method, local_base_path=None):
+    """Generate URLs based on the selected method (pool or binary) with local file lookup."""
+    first_letter = determine_first_letter(package_name)
+    
+    local_copyright_path = get_local_file_path(local_base_path, method, package_name, package_version) if local_base_path else None
+    is_local = bool(local_copyright_path)
 
     if method == "pool":
-        component, pool_base_url = find_package_component(package_name, package_version)
-        copyright_url = f"{pool_base_url}" if component else "Not found"
-        changelog_url = f"{pool_base_url.rsplit('/', 1)[0]}/changelog" if component else "Not found"
+        component, pool_base_url = find_package_component(package_name, package_version) if not is_local else (None, None)
+        copyright_url = local_copyright_path if is_local else (pool_base_url if component else "Not found")
+        changelog_url = (copyright_url.rsplit("/", 1)[0] + "/changelog") if copyright_url != "Not found" else "Not found"
     else:  # Binary method
         binary_base_url = f"https://changelogs.ubuntu.com/changelogs/binary/{first_letter}/{package_name}/{package_version}"
-        copyright_url = f"{binary_base_url}/copyright"
+        copyright_url = local_copyright_path if is_local else f"{binary_base_url}/copyright"
         changelog_url = f"{binary_base_url}/changelog"
         component = "N/A (binary method)"
 
-    licenses = extract_spdx_license(copyright_url) if copyright_url != "Not found" else ["Unknown"]
+    licenses = extract_spdx_license(copyright_url, is_local) if copyright_url != "Not found" else ["Unknown"]
 
     return {
         "component": component if component else "Unknown",
@@ -66,30 +90,7 @@ def get_urls(package_name, package_version, method):
         "licenses": licenses
     }
 
-def get_package_info(package_name, package_version=None):
-    """Use python-apt to determine available Ubuntu releases and architectures for a package."""
-    cache = apt.Cache()
-    releases = []
-    architectures = set()
-
-    try:
-        pkg = cache[package_name]
-        for version in pkg.versions:
-            if package_version and version.version != package_version:
-                continue
-            releases.append(version.origin)
-            for arch in version.architectures:
-                architectures.add(arch)
-
-        if not package_version:
-            package_version = pkg.versions[0].version  # Use the latest version if not provided
-
-    except KeyError:
-        return package_version, ["Package not found"], ["Unknown"]
-
-    return package_version, list(set(releases)) if releases else ["Version not found"], sorted(architectures) if architectures else ["Unknown"]
-
-def process_manifest(file_path_or_url, method, include_release_arch, output_file=None):
+def process_manifest(file_path_or_url, method, include_release_arch, local_base_path, output_file=None):
     """Process a Debian manifest file from a local file or URL and generate package info."""
     results = []
     
@@ -127,14 +128,8 @@ def process_manifest(file_path_or_url, method, include_release_arch, output_file
         package_name, package_version = parts
         
         # Generate URLs
-        package_data = get_urls(package_name, package_version, method)
+        package_data = get_urls(package_name, package_version, method, local_base_path)
         
-        # Get Ubuntu releases and architectures if requested
-        if include_release_arch:
-            package_version, releases, architectures = get_package_info(package_name, package_version)
-            package_data["releases"] = ", ".join(releases)
-            package_data["architectures"] = ", ".join(architectures)
-
         results.append({
             "package": package_name,
             "version": package_version,
@@ -156,9 +151,6 @@ def print_results(results, output_file):
         print(f"Copyright URL: {res['copyright_url']}")
         print(f"Changelog URL: {res['changelog_url']}")
         print(f"SPDX Licenses: {', '.join(res['licenses'])}")
-        if "releases" in res:
-            print(f"Ubuntu Releases: {res['releases']}")
-            print(f"Supported Architectures: {res['architectures']}")
         print("\n" + "-"*60 + "\n")
 
     if output_file:
@@ -181,16 +173,16 @@ def main():
     method_group.add_argument("--pool", action="store_true", help="Use pool method URLs.")
     method_group.add_argument("--binary", action="store_true", help="Use binary method URLs.")
 
-    parser.add_argument("--no-release-arch", action="store_true", help="Skip release and architecture data.")
+    parser.add_argument("--local-path", help="Path to local copyright file directory.")
     parser.add_argument("--output", help="Optional output file to save results.")
 
     args = parser.parse_args()
-
+    
     method = "pool" if args.pool else "binary"
-    include_release_arch = not args.no_release_arch
+    local_base_path = args.local_path
 
     if args.manifest:
-        process_manifest(args.manifest, method, include_release_arch, args.output)
+        process_manifest(args.manifest, method, True, local_base_path, args.output)
 
 if __name__ == "__main__":
     main()
