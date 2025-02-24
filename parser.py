@@ -32,8 +32,8 @@ def fetch_online_copyrights_list(section_url):
         print(f"Error fetching {section_url}: {e}")
     return []
 
-def fetch_online_copyright(url):
-    """Fetch copyright file from a given URL."""
+def fetch_online_file(url):
+    """Fetch file from a given URL."""
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
@@ -83,11 +83,12 @@ def process_section(section, search_dir, license_pattern, online, base_url):
             "package": package_name,
             "version": version,
             "copyright_url": file_path,
+            "changelog_url": file_path.replace("copyright", "changelog"),
             "licenses": list(extracted_licenses)
         })
     
     for url in online_copyright_urls:
-        content = fetch_online_copyright(url)
+        content = fetch_online_file(url)
         if content:
             extracted_licenses = extract_licenses(content, license_pattern)
             package_info = os.path.basename(os.path.dirname(url)).split("_")
@@ -101,6 +102,7 @@ def process_section(section, search_dir, license_pattern, online, base_url):
                 "package": package_name,
                 "version": version,
                 "copyright_url": url,
+                "changelog_url": url.replace("copyright", "changelog"),
                 "licenses": list(extracted_licenses)
             })
     
