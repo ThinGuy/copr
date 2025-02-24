@@ -26,7 +26,7 @@ async def fetch_dirs(session, base_url):
             print(f"Failed to fetch {base_url}")
             return []
         html = await response.text()
-        return [d for d in re.findall(r'href="([^"/]+)/"', html) if d not in ["changelogs", "main", "universe", "multiverse", "restricted"]]
+        return [d for d in re.findall(r'href="([^"/]+)/"', html) if d not in ["changelogs"]]
 
 async def fetch_package_list(session, base_url, directory, retries=3):
     directory_url = f"{base_url}{directory}/"
@@ -88,9 +88,10 @@ async def build_json(mode):
         for directory, future in zip(tasks.keys(), asyncio.as_completed(tasks.values())):
             try:
                 results[directory] = await future
-                with open(f"{directory}.json", "w") as json_file:
-                    json.dump(results[directory], json_file, indent=4)
-                console.print(f"[bold green]{directory} completed[/bold green]")
+                if results[directory]:
+                    with open(f"{directory}.json", "w") as json_file:
+                        json.dump(results[directory], json_file, indent=4)
+                    console.print(f"[bold green]{directory} completed[/bold green]")
             except Exception as e:
                 print(f"Error processing {directory}: {e}")
         
