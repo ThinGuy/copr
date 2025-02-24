@@ -3,6 +3,7 @@ import re
 import json
 import multiprocessing
 import requests
+import argparse
 from bs4 import BeautifulSoup
 from collections import defaultdict
 
@@ -54,15 +55,14 @@ def extract_licenses(content, license_pattern):
                     licenses.add(value.strip())
     return licenses
 
-def process_section(section, search_dir, license_pattern, online=False):
+def process_section(section, search_dir, license_pattern, online, base_url):
     """Process a specific section in parallel and save results to JSON."""
     section_dir = os.path.join(search_dir, "pool", section)
     copyright_files = find_copyright_files(section_dir) if not online else []
     license_data = []
     
     if online:
-        base_url = f"http://changelogs.ubuntu.com/changelogs/pool/{section}"
-        online_copyright_urls = fetch_online_copyrights_list(base_url)
+        online_copyright_urls = fetch_online_copyrights_list(f"{base_url}/{section}")
     else:
         online_copyright_urls = []
     
@@ -109,8 +109,15 @@ def process_section(section, search_dir, license_pattern, online=False):
         json.dump(license_data, f, indent=4)
     print(f"Saved {json_output_file} with {len(license_data)} entries.")
 
-def main(search_dir="~/changelogs.ubuntu.com/changelogs", online=False):
-    search_dir = os.path.expanduser(search_dir)
+def main():
+    parser = argparse.ArgumentParser(description="Process copyright files locally or online.")
+    parser.add_argument("--search-dir", type=str, default="~/changelogs.ubuntu.com/changelogs", help="Local directory to search for copyright files.")
+    parser.add_argument("--online", action='store_true', help="Enable online search.")
+    parser.add_argument("--base-url", type=str, default="http://changelogs.ubuntu.com/changelogs/pool", help="Base URL for online copyright files.")
+    args = parser.parse_args()
+    
+    search_dir = os.path.expanduser(args.search_dir)
+    
     license_pattern = re.compile(
         r'(?P<spdx>SPDX-License-Identifier:.*)|'
         r'(?P<bsd>(4-?clause )?"?BSD"? licen[sc]es?)|'
@@ -125,7 +132,7 @@ def main(search_dir="~/changelogs.ubuntu.com/changelogs", online=False):
     processes = []
     
     for section in sections:
-        p = multiprocessing.Process(target=process_section, args=(section, search_dir, license_pattern, online))
+        p = multiprocessing.Process(target=process_section, args=(section, search_dir, license_pattern, args.online, args.base_url))
         processes.append(p)
         p.start()
     
@@ -135,4 +142,4 @@ def main(search_dir="~/changelogs.ubuntu.com/changelogs", online=False):
     print("Processing complete for all sections.")
 
 if __name__ == "__main__":
-    main(online=True)
+    main()
