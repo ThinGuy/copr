@@ -1,147 +1,108 @@
-import os
-import re
-import json
-import multiprocessing
+#!/usr/bin/env python3
+# Ubuntu Repository Parser
+# Revision: 1.0.3
+# Fix: Handle missing 'Package' field gracefully and skip invalid files
+
+import gzip
 import requests
+import json
+import sys
+from io import BytesIO
 import argparse
-from bs4 import BeautifulSoup
-from collections import defaultdict
+import concurrent.futures
 
-def find_copyright_files(base_dir):
-    """Recursively search for 'copyright' files in the given directory."""
-    copyright_files = []
-    for root, _, files in os.walk(base_dir):
-        if "copyright" in files:
-            copyright_files.append(os.path.join(root, "copyright"))
-    print(f"Found {len(copyright_files)} copyright files in {base_dir}.")
-    return copyright_files
+# Argument parsing
+parser = argparse.ArgumentParser(description='Parse Ubuntu Packages.gz files')
+parser.add_argument('url', nargs='?', help='URL of the Packages.gz file')
+parser.add_argument('-i', '--index-file', help='Path to ubuntu_indexes.json to process multiple indexes')
+parser.add_argument('-o', '--output', default='ubuntu_packages.json', help='Output JSON filename')
+parser.add_argument('--stdout', action='store_true', help='Output JSON to stdout instead of file')
+parser.add_argument('--validate', action='store_true', help='Validate URLs')
 
-def fetch_online_copyrights_list(section_url):
-    """Fetch the list of copyright file URLs from the given section URL."""
-    try:
-        response = requests.get(section_url, timeout=10)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            return [
-                section_url + '/' + a['href'] + '/copyright' 
-                for a in soup.find_all('a', href=True) if '/' in a['href']
-            ]
-        else:
-            print(f"Failed to fetch {section_url}: HTTP {response.status_code}")
-    except Exception as e:
-        print(f"Error fetching {section_url}: {e}")
-    return []
+args = parser.parse_args()
 
-def fetch_online_file(url):
-    """Fetch file from a given URL."""
+# Function to process a single Packages.gz file
+def process_packages_gz(url, release):
     try:
         response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            return response.text
-        else:
-            print(f"Failed to fetch {url}: HTTP {response.status_code}")
-    except Exception as e:
-        print(f"Error fetching {url}: {e}")
-    return None
-
-def extract_licenses(content, license_pattern):
-    """Extract license information from copyright content."""
-    licenses = set()
-    for line in content.splitlines():
-        match = license_pattern.search(line)
-        if match:
-            for key, value in match.groupdict().items():
-                if value:
-                    licenses.add(value.strip())
-    return licenses
-
-def process_section(section, search_dir, license_pattern, online, base_url):
-    """Process a specific section in parallel and save results to JSON."""
-    section_dir = os.path.join(search_dir, "pool", section)
-    copyright_files = find_copyright_files(section_dir) if not online else []
-    license_data = []
-    
-    if online:
-        online_copyright_urls = fetch_online_copyrights_list(f"{base_url}/{section}")
-    else:
-        online_copyright_urls = []
-    
-    for file_path in copyright_files:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-        extracted_licenses = extract_licenses(content, license_pattern)
+        response.raise_for_status()
         
-        parent_dir = os.path.basename(os.path.dirname(file_path))
-        package_info = parent_dir.split("_")
-        if len(package_info) >= 2:
-            package_name = package_info[0]
-            version = "_".join(package_info[1:])
-        else:
-            package_name, version = parent_dir, "unknown"
+        if len(response.content) == 0:
+            print(f"Skipping empty file: {url}")
+            return []
         
-        license_data.append({
-            "package": package_name,
-            "version": version,
-            "copyright_url": file_path,
-            "changelog_url": file_path.replace("copyright", "changelog"),
-            "licenses": list(extracted_licenses)
-        })
+        with gzip.open(BytesIO(response.content), 'rt', encoding='utf-8') as f:
+            packages_data = f.read()
+        
+        if not packages_data.strip():
+            print(f"Skipping zero-byte or unreadable file: {url}")
+            return []
+    except requests.RequestException as e:
+        print(f"Skipping due to download error: {url} - {e}")
+        return []
     
-    for url in online_copyright_urls:
-        content = fetch_online_file(url)
-        if content:
-            extracted_licenses = extract_licenses(content, license_pattern)
-            package_info = os.path.basename(os.path.dirname(url)).split("_")
-            if len(package_info) >= 2:
-                package_name = package_info[0]
-                version = "_".join(package_info[1:])
-            else:
-                package_name, version = "unknown", "unknown"
-            
-            license_data.append({
-                "package": package_name,
-                "version": version,
-                "copyright_url": url,
-                "changelog_url": url.replace("copyright", "changelog"),
-                "licenses": list(extracted_licenses)
-            })
+    packages = packages_data.strip().split("\n\n")
+    parsed_packages = []
     
-    json_output_file = f"{section}_licenses.json"
-    with open(json_output_file, "w", encoding="utf-8") as f:
-        json.dump(license_data, f, indent=4)
-    print(f"Saved {json_output_file} with {len(license_data)} entries.")
+    for pkg in packages:
+        pkg_dict = {"release": release}  # Include release info
+        lines = pkg.strip().split("\n")
+        for line in lines:
+            if line.startswith("Package: "):
+                pkg_dict["package"] = line.split("Package: ")[1]
+            elif line.startswith("Version: "):
+                version = line.split("Version: ")[1]
+                pkg_dict["version"] = version.split(":")[-1]
+            elif line.startswith("Source: "):
+                pkg_dict["source"] = line.split("Source: ")[1].split()[0]
+            elif line.startswith("Section: "):
+                pkg_dict["section"] = line.split("Section: ")[1]
+            elif line.startswith("Maintainer: "):
+                pkg_dict["maintainer"] = line.split("Maintainer: ")[1]
+            elif line.startswith("Size: "):
+                pkg_dict["size"] = int(line.split("Size: ")[1])
+        
+        # Ensure 'package' field exists before setting default source
+        if "package" not in pkg_dict:
+            print(f"Skipping entry with missing 'Package' field: {pkg_dict}")
+            continue
+        
+        pkg_dict.setdefault("source", pkg_dict["package"])
+        
+        if "package" in pkg_dict and "version" in pkg_dict:
+            version_clean = pkg_dict['version'].split(":")[-1]
+            source_initial = pkg_dict["source"][:4] if pkg_dict["source"].startswith("lib") else pkg_dict["source"][0]
+            base_url = f"https://changelogs.ubuntu.com/changelogs/pool/main/{source_initial}/{pkg_dict['source']}/{pkg_dict['source']}_{version_clean}"
+            pkg_dict["copyright"] = f"{base_url}/copyright"
+            pkg_dict["changelog"] = f"{base_url}/changelog"
+            parsed_packages.append(pkg_dict)
+    
+    return parsed_packages
 
-def main():
-    parser = argparse.ArgumentParser(description="Process copyright files locally or online.")
-    parser.add_argument("--search-dir", type=str, default="~/changelogs.ubuntu.com/changelogs", help="Local directory to search for copyright files.")
-    parser.add_argument("--online", action='store_true', help="Enable online search.")
-    parser.add_argument("--base-url", type=str, default="http://changelogs.ubuntu.com/changelogs/pool", help="Base URL for online copyright files.")
-    args = parser.parse_args()
-    
-    search_dir = os.path.expanduser(args.search_dir)
-    
-    license_pattern = re.compile(
-        r'(?P<spdx>SPDX-License-Identifier:.*)|'
-        r'(?P<bsd>(4-?clause )?"?BSD"? licen[sc]es?)|'
-        r'(?P<boost>(Boost Software|mozilla (public)?|MIT) Licen[sc]es?)|'
-        r'(?P<other>(CCPL|BSD|L?GPL)-[0-9a-z.+-]+( Licenses?)?)|'
-        r'(?P<cc>Creative Commons( Licenses?)?)|'
-        r'(?P<pd>Public Domain( Licenses?)?)',
-        re.IGNORECASE
-    )
-    
-    sections = ["main", "universe", "multiverse", "restricted"]
-    processes = []
-    
-    for section in sections:
-        p = multiprocessing.Process(target=process_section, args=(section, search_dir, license_pattern, args.online, args.base_url))
-        processes.append(p)
-        p.start()
-    
-    for p in processes:
-        p.join()
-    
-    print("Processing complete for all sections.")
+all_packages = []
 
-if __name__ == "__main__":
-    main()
+if args.index_file:
+    with open(args.index_file, "r") as f:
+        index_data = json.load(f)
+    
+    for entry in index_data:
+        print(f"Processing: {entry['index_url']}")
+        try:
+            all_packages.extend(process_packages_gz(entry['index_url'], entry['release']))
+        except requests.RequestException as e:
+            print(f"Failed to fetch {entry['index_url']}: {e}")
+
+elif args.url:
+    all_packages = process_packages_gz(args.url, "manual")
+else:
+    print("Error: Either a URL or an index file must be provided.")
+    sys.exit(1)
+
+# Output JSON
+if args.stdout:
+    print(json.dumps(all_packages, indent=2))
+else:
+    with open(args.output, "w") as f:
+        json.dump(all_packages, f, indent=2)
+    print(f"Data successfully saved to {args.output}")
+
