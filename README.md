@@ -61,10 +61,10 @@ The **Ubuntu Project and Package Dashboard** is a comprehensive system designed 
 ---
 
 ## **Workflow**
-1️⃣ **Indexer** → Finds package lists (`Packages.gz` and `Sources.gz`)  
-2️⃣ **Parser** → Extracts package details  
-3️⃣ **Sizer** → Calculates repository size  
-4️⃣ **Tracker** → Tracks package changes over time  
+**Indexer** → Finds package lists (`Packages.gz` and `Sources.gz`)  
+**Parser** → Extracts package details  
+**Sizer** → Calculates repository size  
+**Tracker** → Tracks package changes over time  
 
 ### **Example Use Case**
 A user wants to know how much storage is needed for a specific Ubuntu repository.  
