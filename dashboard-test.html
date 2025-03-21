@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Package &amp; Licensing Dashboard v1.0</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!-- Embedded CSS based on the OCI Dashboard style -->
+    <style>
+      /* Base Styles */
+      html { box-sizing: border-box; }
+      *, *:before, *:after { box-sizing: inherit; }
+      body {
+        margin: 0;
+        font-family: "Ubuntu", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        background-color: #f5f5f5;
+        color: #2e3436;
+        line-height: 1.5;
+      }
+      a { color: #0066cc; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      /* Header */
+      .p-header {
+        background-color: #2e3436;
+        color: #fff;
+        padding: 1rem 2rem;
+      }
+      .p-header__title {
+        font-size: 1.5rem;
+        margin: 0;
+      }
+      /* Tabs */
+      .p-tabs {
+        display: flex;
+        border-bottom: 2px solid #d8d8d8;
+        margin-top: 1rem;
+      }
+      .p-tabs__link {
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+        color: #2e3436;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s ease-in-out;
+      }
+      .p-tabs__link:hover { background-color: #e5e5e5; }
+      .p-tabs__link--active {
+        border-bottom-color: #2e3436;
+        color: #2e3436;
+      }
+      /* Layout */
+      .p-layout {
+        display: flex;
+        margin-top: 1rem;
+      }
+      /* Sidebar */
+      .p-sidebar {
+        width: 220px;
+        background-color: #fff;
+        padding: 1.5rem;
+        border-right: 1px solid #d8d8d8;
+      }
+      .p-sidebar__title {
+        font-size: 1.25rem;
+        margin-bottom: 1rem;
+      }
+      .p-menu {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .p-menu__item {
+        margin-bottom: 0.5rem;
+      }
+      .p-menu__item a {
+        display: block;
+        padding: 0.5rem;
+        color: #2e3436;
+        border-radius: 3px;
+      }
+      .p-menu__item a:hover { background-color: #e5e5e5; }
+      /* Main Content */
+      .p-content {
+        flex-grow: 1;
+        padding: 1.5rem;
+      }
+      .p-content h2 {
+        margin-top: 0;
+      }
+      /* Table */
+      .p-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .p-table th, .p-table td {
+        border: 1px solid #d8d8d8;
+        padding: 0.75rem;
+        text-align: left;
+      }
+      .p-table th { background-color: #f0f0f0; }
+      /* Utility */
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <!-- Header with Top Tabs -->
+    <header class="p-header">
+      <div class="p-header__inner">
+        <h1 class="p-header__title">Package &amp; Licensing Dashboard v1.0</h1>
+        <nav class="p-tabs" role="navigation">
+          <a href="#" class="p-tabs__link" id="licenses-tab">Open Source Licenses</a>
+          <a href="#" class="p-tabs__link p-tabs__link--active" id="packages-tab">Packages</a>
+          <a href="#" class="p-tabs__link" id="repositories-tab">Repositories</a>
+        </nav>
+      </div>
+    </header>
+
+    <!-- Layout with Sidebar and Main Content -->
+    <div class="p-layout">
+      <!-- Sidebar -->
+      <aside class="p-sidebar">
+        <h2 class="p-sidebar__title">Components</h2>
+        <ul class="p-menu">
+          <li class="p-menu__item"><a href="#" data-component="all">All</a></li>
+          <li class="p-menu__item"><a href="#" data-component="main">Main</a></li>
+          <li class="p-menu__item"><a href="#" data-component="universe">Universe</a></li>
+          <li class="p-menu__item"><a href="#" data-component="multiverse">Multiverse</a></li>
+          <li class="p-menu__item"><a href="#" data-component="restricted">Restricted</a></li>
+        </ul>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="p-content">
+        <!-- Open Source Licenses Section -->
+        <section id="licenses-section" class="hidden">
+          <h2>Open Source Licenses</h2>
+          <p>
+            This section will eventually display license details styled similar to
+            <a href="https://ubuntu.com/legal/open-source-licences" target="_blank">ubuntu.com/legal/open-source-licences</a>.
+          </p>
+        </section>
+        <!-- Packages Section -->
+        <section id="packages-section">
+          <h2>Packages</h2>
+          <table class="p-table">
+            <thead>
+              <tr>
+                <th>Package</th>
+                <th>Version</th>
+                <th>Component</th>
+                <th>Links</th>
+              </tr>
+            </thead>
+            <tbody id="packages-table-body">
+              <!-- Data populated dynamically -->
+            </tbody>
+          </table>
+        </section>
+        <!-- Repositories Section -->
+        <section id="repositories-section" class="hidden">
+          <h2>Repositories</h2>
+          <p>
+            This is a placeholder for repository size information, useful for DevOps and sysadmins managing mirrors.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <!-- Embedded JavaScript -->
+    <script>
+      var packagesData = [];
+
+      // Load packages.json via XMLHttpRequest
+      function loadPackages() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'packages.json', true);
+        xhr.onreadystatechange = function() {
+          if(xhr.readyState === 4 && xhr.status === 200) {
+            try {
+              packagesData = JSON.parse(xhr.responseText);
+              populateTable(packagesData);
+            } catch(e) {
+              console.error("Error parsing packages.json", e);
+            }
+          }
+        };
+        xhr.send();
+      }
+
+      // Populate the table with package data
+      function populateTable(data) {
+        var tbody = document.getElementById('packages-table-body');
+        tbody.innerHTML = '';
+        data.forEach(function(pkg) {
+          var row = document.createElement('tr');
+
+          var tdPkg = document.createElement('td');
+          tdPkg.textContent = pkg.package;
+          row.appendChild(tdPkg);
+
+          var tdVer = document.createElement('td');
+          tdVer.textContent = pkg.version;
+          row.appendChild(tdVer);
+
+          var component = '';
+          if(pkg.copyright_url) {
+            var parts = pkg.copyright_url.split('/');
+            var poolIndex = parts.indexOf('pool');
+            if(poolIndex !== -1 && parts.length > poolIndex + 1) {
+              component = parts[poolIndex+1];
+            }
+          }
+          var tdComp = document.createElement('td');
+          tdComp.textContent = component;
+          row.appendChild(tdComp);
+
+          var tdLinks = document.createElement('td');
+          var links = [];
+          if(pkg.copyright_url) {
+            links.push('<a href="' + pkg.copyright_url + '" target="_blank">Copyright</a>');
+          }
+          if(pkg.changelog_url) {
+            links.push('<a href="' + pkg.changelog_url + '" target="_blank">Changelog</a>');
+          }
+          tdLinks.innerHTML = links.join(' | ');
+          row.appendChild(tdLinks);
+
+          tbody.appendChild(row);
+        });
+      }
+
+      // Tab switching
+      function switchTab(tab) {
+        document.getElementById('licenses-section').classList.add('hidden');
+        document.getElementById('packages-section').classList.add('hidden');
+        document.getElementById('repositories-section').classList.add('hidden');
+
+        var tabs = document.querySelectorAll('.p-tabs__link');
+        tabs.forEach(function(t) {
+          t.classList.remove('p-tabs__link--active');
+        });
+        if(tab === 'licenses'){
+          document.getElementById('licenses-section').classList.remove('hidden');
+          document.getElementById('licenses-tab').classList.add('p-tabs__link--active');
+        } else if(tab === 'packages'){
+          document.getElementById('packages-section').classList.remove('hidden');
+          document.getElementById('packages-tab').classList.add('p-tabs__link--active');
+        } else if(tab === 'repositories'){
+          document.getElementById('repositories-section').classList.remove('hidden');
+          document.getElementById('repositories-tab').classList.add('p-tabs__link--active');
+        }
+      }
+
+      // Sidebar filtering by component
+      function filterByComponent(component) {
+        var filtered = packagesData;
+        if(component !== 'all'){
+          filtered = packagesData.filter(function(pkg) {
+            if(pkg.copyright_url){
+              var parts = pkg.copyright_url.split('/');
+              var poolIndex = parts.indexOf('pool');
+              if(poolIndex !== -1 && parts.length > poolIndex+1){
+                return parts[poolIndex+1].toLowerCase() === component;
+              }
+            }
+            return false;
+          });
+        }
+        populateTable(filtered);
+      }
+
+      // Set up event listeners on DOMContentLoaded
+      document.addEventListener('DOMContentLoaded', function() {
+        loadPackages();
+
+        document.getElementById('licenses-tab').addEventListener('click', function(e) {
+          e.preventDefault();
+          switchTab('licenses');
+        });
+        document.getElementById('packages-tab').addEventListener('click', function(e) {
+          e.preventDefault();
+          switchTab('packages');
+        });
+        document.getElementById('repositories-tab').addEventListener('click', function(e) {
+          e.preventDefault();
+          switchTab('repositories');
+        });
+
+        var menuItems = document.querySelectorAll('.p-menu a');
+        menuItems.forEach(function(item) {
+          item.addEventListener('click', function(e) {
+            e.preventDefault();
+            filterByComponent(this.getAttribute('data-component'));
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
+

@@ -29,7 +29,16 @@
       </div>
       <div class="row">
           <div class="col-12">
-                         <div class="stats">
+              <!-- <p class="u-no-max-width">
+                  Should we want text here, go to town.
+              </p> -->
+              <div id="dashboard">
+                  <div class="p-tabs">
+                    <div class="p-tabs__list" role="tablist" aria-label="categories">
+                      <div class="p-tabs__item">
+                        <button class="p-tabs__link" role="tab" aria-selected="false" aria-controls="tab-All" id="tab-0">All Packages
+                        </button>
+                        <div class="stats">
                           <div class="stat-box">
                               <div>Total Packages</div>
                               <div id="total-packages" class="stat-value">0</div>
@@ -46,7 +55,14 @@
                               <div>Total Source Size</div>
                               <div id="total-source-size" class="stat-value">0 GB</div>
                           </div>
-                        </div>                      <div class="table-container">
+                        </div>
+                      </div>                                        
+                    </div>
+                    <div class="p-tabs__item">
+                      <button class="p-tabs__link" role="tab" aria-selected="false" aria-controls="tab-Main" id="tab-1">Main
+                      </button>
+                      
+                      <div class="table-container">
                         <h2>Repository Sizes by Release and Architecture</h2>
                          <table>
                             <thead>
@@ -62,8 +78,42 @@
                         </table>
                       </div>                      
                     </div>
-                </div>                      
+                  
+                    <div class="p-tabs__item">
+                      <button class="p-tabs__link" role="tab" aria-selected="false" aria-controls="tab-Universe" id="tab-2">Universe
+                      </button>
+                      
+                    </div>
+                    
+                    <div class="p-tabs__item">
+                      <button class="p-tabs__link" role="tab" aria-selected="false" aria-controls="tab-Multiverse" id="tab-3">Multiverse
+                      </button>
+                      
+                    </div>
+                
+                    <div class="p-tabs__item">
+                      <button class="p-tabs__link" role="tab" aria-selected="false" aria-controls="tab-Restricted" id="tab-4">Restricted
+                      </button>
+                      
+                    </div>
+                    
+                    <div class="p-tabs__item">
+                      <button class="p-tabs__link" role="tab" aria-selected="false" aria-controls="tab-Copyright" id="tab-5">Copyright/Licenses
+                      </button>
+                      
+                    </div>
+                  </div>
+                </div>
               </div>
+              <table>
+                <thead>
+                  <tr>
+                  </tr>
+                </thead>
+                <tbody>
+                
+                </tbody>
+              </table>
               <div class="row">
                 <div class="u-text--muted u-align-text--center">created by crAIg
               </div>
